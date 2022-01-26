@@ -1,0 +1,200 @@
+---
+title: "Gov 2018 Lab 1: k nearest neighbors"
+author: "Adeline Lo"
+date: "January 22, 2022"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+
+library(tidyverse)
+
+```
+
+This exercise is based on: 
+
+Pager, Devah. (2003). "[The Mark of a Criminal Record](https://doi.org/10.1086/374403)." *American Journal of Sociology* 108(5):937-975. You are also welcome to watch Professor Pager discuss the design and result [here](https://youtu.be/nUZqvsF_Wt0).
+
+To isolate the causal effect of a criminal record for black and white applicants, Pager ran an audit experiment. In this type of experiment, researchers present two similar people that differ only according to one trait thought to be the source of discrimination. We will be using this dataset to see if certain applicant characteristics (including race) can help us predict out of sample callback rates for job applications.
+
+In the data you will use `criminalrecord.csv` nearly all these cases are present, but 4 cases have been redacted. We’ve kept these unnecessary variables in the dataset because it is common to receive a dataset with much more information than you need.
+
+
+------------------------------------------------------------------------------------------
+Name                        Description
+--------------------------- --------------------------------------------------------------
+`jobid`                     Job ID number  
+
+`callback`                  1 if tester received a callback, 0 if the tester did not receive a callback. 
+
+`black`                     1 if the tester is black, 0 if the tester is white.
+
+`crimrec`                   1 if the tester has a criminal record, 0 if the tester does not.
+
+`interact`                  1 if tester interacted with employer during the job application, 0 if tester does not interact with employer.
+`city`                      1 is job is located in the city center, 0 if job is located in the suburbs.
+
+`distance`                  Job’s average distance to downtown.
+
+`custserv`                  1 if job is in the costumer service sector, 0 if it is not.
+
+`manualskill`               1 if job requires manual skills, 0 if it does not.
+
+------------------------------------------------------------------------------------------
+For our classification exercise, we will consider `callback` the label of our dependent variable; all other variables are our explanatory variables. 
+
+## KNN
+
+### Read in data and take a look at it:
+
+Read in the data, and omit NAs. You should end up with 694 observations.
+
+```{r}
+
+# load in data and omit all na values
+data <- read_csv("criminalrecord.csv") %>%
+  na.omit()
+
+```
+
+
+### Question 1: Create Training/Testing data split in R. 
+
+\begin{enumerate}
+\item Set the seed to 2019.
+\item Randomly sample 70\% of the data for training and set aside the remaining 30\% for testing.
+\item Create a function that calculates the Euclidean distance between 2 points. As a reminder, the formula for Euclidean distance is:
+\begin{equation}
+d(x_{1},x_{2})=\sqrt{\sum_{p=0}^n (x_{1p}-x_{2p})^2}
+\end{equation}
+\end{enumerate}
+
+
+```{r}
+
+set.seed(2019)
+
+# randomly move rows
+jumbled <- data[sample(1:nrow(data),nrow(data), replace = F),]
+
+# slice top 70%
+training <- slice(jumbled, 1:485)
+
+# slice bottom 30%
+test <- slice(jumbled, 486:nrow(jumbled))
+
+# create a function for euclidean distance
+euclidian <- function(x,y){
+  d <- sqrt(sum((x-y)^2))
+  return(d)
+}
+
+```
+
+
+### Question 2: KNN prediction function
+
+Write a function `knn` with the following characteristics:
+\begin{itemize}
+\item 3 arguments: test data, train data, and a value for k
+\item Loops over all records of test and train data
+\item Returns predicted class labels of test data
+\end{itemize}
+
+```{r}
+
+knn <- function(test, train, k){
+  pred <- c()  #empty pred vector 
+  #LOOP-1
+  for(i in c(1:nrow(test))){  
+    # set up baseline 0s so that 
+    eu_dist = c()       
+    eu_char = c()
+    yes = 0          
+    no = 0
+    
+    #LOOP-2-looping over train data 
+    for(j in c(1:nrow(train))){
+ 
+      # create vectors for the distance and the label of the euclidean 
+      eu_dist <- c(eu_dist, euclidian(test[i,-2],train[j,-2])) 
+      eu_char <- c(eu_char, as.character(train[j,2])) 
+    }
+    #create a dataframe using the abovedistance and character data
+    eu <- data.frame(eu_char, eu_dist) 
+ 
+    # use order to see which neighbors are the closest - doing this instead of sort keeps in mind the position not just the value
+    eu <- eu[order(eu$eu_dist),]    
+    # keep a dataframe with the top k matches
+    eu <- eu[1:k,]               
+ 
+    #Loop 3: loops over eu and counts classes of neighbors. A vectorized version is to simply average the eu_dist variable and assign to 1 if the avg>0.5 and 0 otherwise
+    for(k in c(1:nrow(eu))){
+      if(as.character(eu[k,"eu_char"]) == 1){
+        yes = yes + 1
+      }
+      else
+        no = no + 1
+    }
+ 
+    # Compares the no. of neighbors with class label yes or no
+    
+    # use if statement to look at the different options for whether the number of yesses is greater than the number of nos - predict is the one that has more
+    if(yes > no){          
+ 
+      pred <- c(pred, 1)
+    }
+    else if(yes < no){
+                  
+      pred <- c(pred, 0)
+    }
+    
+  }
+  return(pred) 
+}
+
+```
+
+
+### Question 3 Accuracy calculation
+
+Create a function called `accuracy` that calculates how accurate your predictions are for the test labels. The accuracy function should calculate the ratio of the number of correctly predicted labels to the total number of predicted labels.
+
+```{r}
+
+# the accuracy function creates a "correct vector and then looks at the test value and its prediction. If they are the same, the correct vector is added to so that eventually it will have looked at all all values and be able to calculate the accuracy rate
+
+accuracy <- function(test){
+  correct = 0
+  for (i in 1:nrow(test)) {
+    if (test[i,2] == test$pred[i]) {
+      correct = correct + 1
+    }
+  }
+  
+  acc_rate = correct / nrow(test) *100
+  return(acc_rate)
+}
+
+```
+
+
+### Question 4 Make your prediction, find your accuracy
+
+Using K=5, predict your labels for the testing data using the `knn` function you wrote. 
+
+Append the prediction vector a column in your test dataframe and then using the `accuracy()` method you wrote up in the previous question print the accuracy of your KNN model. What is the accuracy rate of your classification?
+
+```{r}
+K <- 5
+
+pred <- knn(test, training, K)
+
+# append the prediction to the test data
+test$pred <- pred
+cat("the accuracy rate for K=5 is:", accuracy(test))
+
+```
+
